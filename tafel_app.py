@@ -33,7 +33,7 @@ class Model:
             new_fname =  ''
             for e in temp[:-2]:
                 new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'_temp.'+str(temp[-1]))
+            new_fname += (str(temp[-2])+'.temp')
             f = open(new_fname, 'w+')
             f.write(s)
             f.close()
@@ -49,7 +49,6 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
-        #print('loaded data', self.x, self.ylog)
         
     def add_data(self, fname):
         try:
@@ -62,7 +61,7 @@ class Model:
             new_fname =  ''
             for e in temp[:-2]:
                 new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'_temp.'+str(temp[-1]))
+            new_fname += (str(temp[-2])+'.temp')
             f = open(new_fname, "w+")
             f.write(s)
             f.close()

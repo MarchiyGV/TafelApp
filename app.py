@@ -24,18 +24,24 @@ import numpy as np
 from pyqtgraph import PlotWidget, mkPen
 import pyqtgraph as pg
 from DraggingHandler import DraggingScatter
-#import exception_hooks
+import exception_hooks
 
 
 def pretty_round(num):
-    working = str(num-int(num))
-    if np.sign(num)<0:
-        n = 3
-    else: 
-        n = 2
-    for i, e in enumerate(working[n:]):
-        if e != '0':
-            return round(num, i+1)
+    if np.isnan(num):
+        return num
+    if np.isinf(num):
+        return num
+    else:
+        working = str(num-int(num))
+        if np.sign(num)<0:
+            n = 3
+        else: 
+            n = 2
+        for i, e in enumerate(working[n:]):
+            if e != '0':
+                return round(num, i+1)
+    
 
 
 class TableModel(QtCore.QAbstractTableModel):
@@ -96,6 +102,22 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.selected_data = ''
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
         self.auto_selection()
+        
+        
+    @pyqtSlot()      
+    def load_dataset(self):
+        fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
+        for fname in fnames:
+            self.model.load_data(fname)
+            name = f'Data {len(self.data)+1}'
+            self.data.update({name: [fname]})
+            self.genDataDisp()
+            self.upd_tree()
+            self.auto_selection()
+            self.u_saved.update({name: self.u})
+            self.selected_data = name
+        if len(fnames)>0:
+            self.tafel()
         
     def save(self):
         name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Tafel app files (*.tfl)')[0]
@@ -195,22 +217,6 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.upd_tree()
             self.do_select(auto_select)
         
-    @pyqtSlot()      
-    def load_dataset(self):
-        fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
-        if fname:
-            self.model.load_data(fname)
-            name = f'Data {len(self.data)+1}'
-            self.data.update({name: [fname]})
-            self.genDataDisp()
-            self.upd_tree()
-            self.auto_selection()
-            self.u_saved.update({name: self.u})
-            self.selected_data = name
-            self.tafel()
-        else:
-            pass
-        
     def genDataDisp(self):
         self.data_disp = {}
         for name, fnames in self.data.items():
@@ -245,8 +251,8 @@ class App(QMainWindow, design.Ui_MainWindow):
         q = np.zeros_like(us)
         for i, u in enumerate(us):
             q[i] = np.sum(u>=self.model.x)-1
-            q[i] = max(0, q[i])
-            q[i] = min(len(self.model.x)-1, q[i])
+            q[i] = max(i, q[i])
+            q[i] = min(len(self.model.x)-1-(3-i), q[i])
         return q
     
     def on_change_selection(self):
