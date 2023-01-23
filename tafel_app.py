@@ -6,8 +6,9 @@ import os
 
 class Model:
     k = 8.617333262e-5
-    def __init__(self):
+    def __init__(self, parent):
         super().__init__()
+        self.parent = parent
         self.E_corr = 0
         self.i_corr = 0
         self.alpha = 0
@@ -22,25 +23,35 @@ class Model:
         self.y = self.j(alpha, 300, self.x-ocv)
         self.ylog = np.log(np.abs(self.y))
         
-    def load_data(self, fname):
-        try:
-            data = np.loadtxt(fname, skiprows=1, delimiter=',')
-        except ValueError:
-            f = open(fname)
-            s = f.read().replace(",", "." ) 
-            f.close()
+    def read_data(self, fname, flag):
+        if flag:
+            try:
+                s = np.loadtxt(fname, skiprows=1, delimiter=',')
+            except ValueError:
+                f = open(fname)
+                s = f.read().replace(",", "." ) 
+                f.close()
+            except FileNotFoundError as err:
+                return err
+            
             temp = fname.split('.')
-            new_fname =  ''
-            for e in temp[:-2]:
-                new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'.temp')
+            temp = temp[-2].split('/')
+            new_fname = (self.parent.ppath + '/' + self.parent.pname + 
+                         '/' + str(temp[-1])+'.tdata')
             f = open(new_fname, 'w+')
             f.write(s)
             f.close()
             data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
-            os.remove(new_fname)
-        except FileNotFoundError as err:
-            return err
+            return data, new_fname
+        else:
+            data = np.loadtxt(fname, skiprows=1, delimiter='\t')
+            return data, fname
+    
+    def load_data(self, fname):
+        flag = True 
+        if fname.split('.')[-1] == 'tdata':
+            flag = False
+        data, new_fname = self.read_data(fname, flag)
             
         self.x = np.transpose(data[:, 1]).reshape((-1, 1))
         ind = np.argsort(self.x, axis=0)
@@ -51,26 +62,13 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
-        return True
+        return new_fname
         
     def add_data(self, fname):
-        try:
-            data = np.loadtxt(fname, skiprows=1, delimiter=',')
-        except ValueError:
-            f = open(fname)
-            s = f.read().replace(",", "." ) 
-            f.close()
-            temp = fname.split('.')
-            new_fname =  ''
-            for e in temp[:-2]:
-                new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'.temp')
-            f = open(new_fname, "w+")
-            f.write(s)
-            f.close()
-            data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
-        except FileNotFoundError as err:
-            return err
+        flag = True 
+        if fname.split('.')[-1] == 'tdata':
+            flag = False
+        data, new_fname = self.read_data(fname, flag)
         
         x_new = np.transpose(data[:, 1]).reshape((-1, 1))
         self.x = np.concatenate((self.x, x_new))
@@ -83,7 +81,7 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
-        return True
+        return new_fname
         
     def j(self, alpha, T, eta):
         f = 1/(Model.k*T)

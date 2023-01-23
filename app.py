@@ -43,6 +43,15 @@ def pretty_round(num):
             if e != '0':
                 return round(num, i+1)
     
+class DialogNewP(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        uic.loadUi('dialog_new_project.ui', self)
+        self.open_path_btn.clicked.connect(self.open_folder)
+        
+    def open_folder(self):
+        folder = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        self.ppath.setText(folder)
 
 
 class TableModel(QtCore.QAbstractTableModel):
@@ -85,13 +94,14 @@ class App(QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         super().__init__()
         uic.loadUi('design.ui', self)
+        self.actionNew.triggered.connect(self.new_project)
         self.actionLoad.triggered.connect(self.open_file)
         self.actionSave.triggered.connect(self.save)
-        self.actionPlus.clicked.connect(self.plus)
+        self.actionPlus.clicked.connect(self.add_to_dataset)
         self.actionMinus.clicked.connect(self.minus)
         self.btnNewDataset.clicked.connect(self.load_dataset)
         self.btnExport.clicked.connect(self.export)
-        self.model = Model()
+        self.model = Model(self)
         self.clickedPen = pg.mkPen('b', width=2)
         self.lastClicked = []
         self.info = TableModel([['', ''], ['', '']])
@@ -102,6 +112,17 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
         self.input_tree.itemChanged[QTreeWidgetItem, int].connect(self.rename_dataset)
         self.auto_selection()
+        self.pname = ''
+        self.ppath = ''
+        self.btns_enabled(False)
+        
+    
+    def btns_enabled(self, flag):
+        self.actionSave.setEnabled(flag)
+        self.actionPlus.setEnabled(flag)
+        self.actionMinus.setEnabled(flag)
+        self.btnNewDataset.setEnabled(flag)
+        self.btnExport.setEnabled(flag)
         
         
     def rename_dataset(self, item, column):    
@@ -127,15 +148,30 @@ class App(QMainWindow, design.Ui_MainWindow):
         msg.exec_()
     
     @pyqtSlot()      
+    def new_project(self):
+        dlg = DialogNewP(self)
+        dlg.exec()
+        if dlg.result():
+            self.pname = dlg.pname.text()
+            self.ppath = dlg.ppath.text()
+            try:
+                os.mkdir(f'{self.ppath}/{self.pname}')
+            except FileExistsError:
+                self.error_msg(f'Project "{self.ppath}/{self.pname}" is already exists!')
+                return 
+            self.btns_enabled(True)
+        
+    
+    @pyqtSlot()      
     def load_dataset(self):
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
-            self.model.load_data(fname)
+            new_fname = self.model.load_data(fname, )
             name = f'Data {len(self.datasets)+1}'
             self.auto_selection()
-            data_disp = fname.split('/')[-1]
+            data_disp = new_fname.split('/')[-1]
             row = pd.DataFrame({'name': [name], 
-                                  'data': [[fname]], 
+                                  'data': [[new_fname]], 
                                   'data_disp':[[data_disp]], 
                                   'u_saved': [np.array(self.u)]})
             self.datasets = pd.concat([self.datasets, row], ignore_index = True)
@@ -144,23 +180,46 @@ class App(QMainWindow, design.Ui_MainWindow):
         if len(fnames)>0:
             self.tafel()
         
-    def save(self):
-        name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Tafel app files (*.tfl)')[0]
-        with open(name, 'wb') as handle:
-            pickle.dump(self.datasets, handle, protocol=pickle.HIGHEST_PROTOCOL)
-       
-    def export(self):
-        name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Text files (*.txt)')[0]
-        np.savetxt(name, self.info.export(), fmt="%s")
+        
+    @pyqtSlot()      
+    def add_to_dataset(self):
+        if np.any(self.selected_data):
+            fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
+            if fname:
+                new_fname = self.model.add_data(fname)
+                self.datasets['data'][self.selected_data][0].append(new_fname)
+                fname_disp = new_fname.split('/')[-1]
+                self.datasets['data_disp'][self.selected_data][0].append(fname_disp)
+                self.upd_tree()
+                self.tafel()
+            else:
+                pass
+        else:
+            print("You don't select dataset!")
             
+    def save(self):
+        name = f'{self.ppath}/{self.pname}/project.tfl'
+        with open(name, 'wb') as handle:
+            pickle.dump((self.datasets), handle, protocol=pickle.HIGHEST_PROTOCOL)
+       
     def open_file(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', 'C:\\', 'Tafel app files (*.tfl)')[0]
         if fname:
             with open(fname, 'rb') as handle:
                 self.datasets = pickle.load(handle)
+            ppath = ''
+            for s in fname.split('/')[:-2]:
+                ppath += s
+            self.ppath = ppath
+            self.pname = fname.split('/')[-2]
             self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
             self.upd_tree()
             self.do_select()
+            self.btns_enabled(True)
+            
+    def export(self):
+        name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Text files (*.txt)')[0]
+        np.savetxt(name, self.info.export(), fmt="%s")
     
     def upd_tree(self):
         self.input_tree.clear()
@@ -224,8 +283,6 @@ class App(QMainWindow, design.Ui_MainWindow):
         u2 = u0+2*(u3-u0)/3
         self.u = np.array([u0, u1, u2, u3])
     
-    def plus(self):
-        self.add_file()
             
     def minus(self):
         getSelected = self.input_tree.selectedItems()
@@ -253,21 +310,6 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.upd_tree()
             self.do_select(auto_select)
         
-    @pyqtSlot()      
-    def add_file(self):
-        if np.any(self.selected_data):
-            fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
-            if fname:
-                self.model.add_data(fname)
-                self.datasets['data'][self.selected_data][0].append(fname)
-                fname_disp = fname.split('/')[-1]
-                self.datasets['data_disp'][self.selected_data][0].append(fname_disp)
-                self.upd_tree()
-                self.tafel()
-            else:
-                pass
-        else:
-            print("You don't select dataset!")
         
     def convert_u_from_slider(self, n):
         return n*self.model.dx/len(self.model.x) + self.model.xmin

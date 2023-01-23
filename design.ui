@@ -221,6 +221,7 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionNew"/>
     <addaction name="actionLoad"/>
     <addaction name="actionSave"/>
    </widget>
@@ -239,12 +240,17 @@
   </action>
   <action name="actionSave">
    <property name="text">
-    <string>Save</string>
+    <string>Save project</string>
    </property>
   </action>
   <action name="actionLoad">
    <property name="text">
-    <string>Open</string>
+    <string>Open project</string>
+   </property>
+  </action>
+  <action name="actionNew">
+   <property name="text">
+    <string>New project</string>
    </property>
   </action>
  </widget>
