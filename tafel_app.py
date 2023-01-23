@@ -39,6 +39,8 @@ class Model:
             f.close()
             data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
             os.remove(new_fname)
+        except FileNotFoundError as err:
+            return err
             
         self.x = np.transpose(data[:, 1]).reshape((-1, 1))
         ind = np.argsort(self.x, axis=0)
@@ -49,6 +51,7 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
+        return True
         
     def add_data(self, fname):
         try:
@@ -66,6 +69,9 @@ class Model:
             f.write(s)
             f.close()
             data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
+        except FileNotFoundError as err:
+            return err
+        
         x_new = np.transpose(data[:, 1]).reshape((-1, 1))
         self.x = np.concatenate((self.x, x_new))
         ind = np.argsort(self.x, axis=0)
@@ -77,6 +83,7 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
+        return True
         
     def j(self, alpha, T, eta):
         f = 1/(Model.k*T)

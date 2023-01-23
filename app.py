@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem
 )
 import pickle
+import pandas as pd
 from PyQt5.QtGui import QCursor
 from PyQt5 import QtWidgets, uic, QtCore
 #from pyqtgraph import PlotWidget
@@ -24,7 +25,7 @@ import numpy as np
 from pyqtgraph import PlotWidget, mkPen
 import pyqtgraph as pg
 from DraggingHandler import DraggingScatter
-import exception_hooks
+#import exception_hooks
 
 
 def pretty_round(num):
@@ -96,33 +97,57 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.info = TableModel([['', ''], ['', '']])
         self.output_widget.setModel(self.info)
         self.tafel_widget.setBackground('w')
-        self.data = {}
-        self.data_disp = {}
-        self.u_saved = {}
+        self.datasets = pd.DataFrame(columns=['name', 'data', 'data_disp', 'u_saved'])
         self.selected_data = ''
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
+        self.input_tree.itemChanged[QTreeWidgetItem, int].connect(self.rename_dataset)
         self.auto_selection()
         
         
+    def rename_dataset(self, item, column):    
+        new_name = item.text(0)
+        
+        if np.any(new_name==self.datasets['name']):
+            old_name = self.datasets['name'][self.selected_data].values[0]
+            self.input_tree.blockSignals(True)
+            item.setText(0, old_name)
+            self.input_tree.blockSignals(False)
+            self.error_msg(f'Dataset with name "{new_name}" is already exist!')
+            return
+            #raise ValueError(f'Dataset with name "{new_name}" is already exist!')
+            
+        self.datasets['name'][self.selected_data] = new_name
+        
+    def error_msg(self, text):
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setText("Error:")
+        msg.setInformativeText(text)
+        msg.setWindowTitle("Error")
+        msg.exec_()
+    
     @pyqtSlot()      
     def load_dataset(self):
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
             self.model.load_data(fname)
-            name = f'Data {len(self.data)+1}'
-            self.data.update({name: [fname]})
-            self.genDataDisp()
-            self.upd_tree()
+            name = f'Data {len(self.datasets)+1}'
             self.auto_selection()
-            self.u_saved.update({name: self.u})
-            self.selected_data = name
+            data_disp = fname.split('/')[-1]
+            row = pd.DataFrame({'name': [name], 
+                                  'data': [[fname]], 
+                                  'data_disp':[[data_disp]], 
+                                  'u_saved': [np.array(self.u)]})
+            self.datasets = pd.concat([self.datasets, row], ignore_index = True)
+            self.upd_tree()
+            self.selected_data = (self.datasets['name']==name)
         if len(fnames)>0:
             self.tafel()
         
     def save(self):
         name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Tafel app files (*.tfl)')[0]
         with open(name, 'wb') as handle:
-            pickle.dump([self.data, self.u_saved], handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self.datasets, handle, protocol=pickle.HIGHEST_PROTOCOL)
        
     def export(self):
         name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Text files (*.txt)')[0]
@@ -130,23 +155,29 @@ class App(QMainWindow, design.Ui_MainWindow):
             
     def open_file(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', 'C:\\', 'Tafel app files (*.tfl)')[0]
-        with open(fname, 'rb') as handle:
-            self.data, self.u_saved = pickle.load(handle)
-        self.selected_data = list(self.data.keys())[0]
-        self.genDataDisp()
-        self.upd_tree()
-        self.do_select()
+        if fname:
+            with open(fname, 'rb') as handle:
+                self.datasets = pickle.load(handle)
+            self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
+            self.upd_tree()
+            self.do_select()
     
     def upd_tree(self):
         self.input_tree.clear()
         items = []
-        for key, values in list(self.data_disp.items()):
+        for i in range(len(self.datasets)):
+            key = self.datasets['name'].iloc[i]
+            values = self.datasets['data_disp'].iloc[i]
             item = QTreeWidgetItem([key])
             for value in values:
                 child = QTreeWidgetItem([value])
                 child.setToolTip(0, value)
                 item.addChild(child)
+            item.setFlags(QtCore.Qt.ItemIsEditable |
+                        QtCore.Qt.ItemIsEnabled |
+                        QtCore.Qt.ItemIsSelectable)
             items.append(item)
+            
         self.input_tree.insertTopLevelItems(0, items)
         
     def data_selection(self):
@@ -155,33 +186,35 @@ class App(QMainWindow, design.Ui_MainWindow):
             baseNode = getSelected[0]
             getChildNode = baseNode.text(0)
             if getChildNode:
-                if ('Data ' in getChildNode):
-                    self.selected_data = getChildNode
-                    self.do_select()
-                    # self.selected_higlight:
-                      #  pass#self.tafel()
+                if (getChildNode in self.datasets['name'].values):
+                    select = getChildNode
                 else:
                     name = baseNode.parent().text(0)
-                    self.selected_data = name
-                    self.do_select()
+                    select = name
                     
-                    
-                
+                self.selected_data = (self.datasets['name']==select)
+                self.do_select()
                 
     def do_select(self, auto_select=False):
-        if len(self.data)>0:
-            keys = list(self.data.keys())
-            if not self.selected_data in keys:
-                self.selected_data = keys[0]
-            for i, fname in enumerate(self.data[self.selected_data]):
+        if len(self.datasets)>0:
+            if not np.any(self.selected_data):
+                self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
+            select = self.datasets['data'][self.selected_data].values[0]
+            for i, fname in enumerate(select):
                 if i==0:
-                    self.model.load_data(fname)
+                    flag = self.model.load_data(fname)
+                    if isinstance(flag, FileNotFoundError):
+                        self.error_msg(f'File {fname} was not found!')
+                        return
                 else:
-                    self.model.add_data(fname)
+                    flag = self.model.add_data(fname)
+                    if isinstance(flag, FileNotFoundError):
+                        self.error_msg(f'File {fname} was not found!')
+                        return
             if auto_select:
                 self.auto_selection()
             else:
-                self.u = self.u_saved[self.selected_data]
+                self.u = np.array(self.datasets['u_saved'][self.selected_data].values[0])
             self.tafel()
         
     def auto_selection(self):
@@ -190,7 +223,6 @@ class App(QMainWindow, design.Ui_MainWindow):
         u1 = u0+(u3-u0)/3
         u2 = u0+2*(u3-u0)/3
         self.u = np.array([u0, u1, u2, u3])
-        self.u_saved[self.selected_data]=self.u
     
     def plus(self):
         self.add_file()
@@ -201,48 +233,41 @@ class App(QMainWindow, design.Ui_MainWindow):
             auto_select = False
             baseNode = getSelected[0]
             getChildNode = baseNode.text(0)
-            if getChildNode and ('Data ' in getChildNode):
-                self.data.pop(getChildNode)
-                self.data_disp.pop(getChildNode)
-                self.u_saved.pop(getChildNode)
+            if getChildNode and (getChildNode in self.datasets['name'].values):
+                ind = self.datasets.index[self.selected_data].tolist()[0]
+                self.datasets = self.datasets.drop(ind)
             else:
                 dataset = baseNode.parent().text(0)
-                i = self.data_disp[dataset].index(getChildNode)
-                self.data[dataset].pop(i)
-                self.data_disp[dataset].pop(i)
-                if len(self.data[dataset]) == 0:
-                    del self.data[dataset]
-                    del self.data_disp[dataset]
+                ind = (self.datasets['name']==dataset)
+                i = np.where(np.array(self.datasets['data_disp'][ind].values[0])==getChildNode)[0][0]
+                self.datasets['data_disp'][ind].values[0].pop(i)
+                self.datasets['data'][ind].values[0].pop(i)
+                
+                if len(self.datasets['data_disp'][ind].values[0]) == 0:
+                    ind = self.datasets.index[self.selected_data].tolist()[0]
+                    self.datasets = self.datasets.drop(ind)
+                    
                 auto_select = True
+                
+            self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
             self.upd_tree()
             self.do_select(auto_select)
         
-    def genDataDisp(self):
-        self.data_disp = {}
-        for name, fnames in self.data.items():
-            self.data_disp.update({name: []})
-            for fname in fnames:
-                fname_disp = fname.split('/')[-1]
-                self.data_disp[name].append(fname_disp)
-            
-        
     @pyqtSlot()      
     def add_file(self):
-        if 'Data ' in self.selected_data:
+        if np.any(self.selected_data):
             fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
             if fname:
                 self.model.add_data(fname)
-                self.data[self.selected_data].append(fname)
+                self.datasets['data'][self.selected_data][0].append(fname)
                 fname_disp = fname.split('/')[-1]
-                self.data_disp[self.selected_data].append(fname_disp)
+                self.datasets['data_disp'][self.selected_data][0].append(fname_disp)
                 self.upd_tree()
-                #self.auto_selection()
                 self.tafel()
             else:
                 pass
         else:
             print("You don't select dataset!")
-            self.open_file()
         
     def convert_u_from_slider(self, n):
         return n*self.model.dx/len(self.model.x) + self.model.xmin
@@ -271,8 +296,8 @@ class App(QMainWindow, design.Ui_MainWindow):
                 pos[3] += dx
             else:
                 pos[2] -= dx
-        self.u = pos
-        self.u_saved[self.selected_data] = self.u
+        self.u = np.array(pos)
+        self.datasets.loc[self.selected_data, 'u_saved'] = [self.u]
         self.tafel(upd_range=False)
         return True
 
