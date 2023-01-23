@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 )
 import pickle
 import pandas as pd
-from PyQt5.QtGui import QCursor
+from PyQt5 import QtGui
 from PyQt5 import QtWidgets, uic, QtCore
 #from pyqtgraph import PlotWidget
 import os
@@ -48,6 +48,7 @@ class DialogNewP(QDialog):
         super().__init__(parent)
         uic.loadUi('dialog_new_project.ui', self)
         self.open_path_btn.clicked.connect(self.open_folder)
+        self.ppath.setText(os.getcwd())
         
     def open_folder(self):
         folder = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
@@ -97,6 +98,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.actionNew.triggered.connect(self.new_project)
         self.actionLoad.triggered.connect(self.open_file)
         self.actionSave.triggered.connect(self.save)
+        self.actionSave_as.triggered.connect(self.save_as)
         self.actionPlus.clicked.connect(self.add_to_dataset)
         self.actionMinus.clicked.connect(self.minus)
         self.btnNewDataset.clicked.connect(self.load_dataset)
@@ -104,7 +106,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.model = Model(self)
         self.clickedPen = pg.mkPen('b', width=2)
         self.lastClicked = []
-        self.info = TableModel([['', ''], ['', '']])
+        self.info = TableModel([['', ''], ['', ''], ['', ''], ['', ''], ['', '']])
         self.output_widget.setModel(self.info)
         self.tafel_widget.setBackground('w')
         self.datasets = pd.DataFrame(columns=['name', 'data', 'data_disp', 'u_saved'])
@@ -115,10 +117,11 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.pname = ''
         self.ppath = ''
         self.btns_enabled(False)
+        self.not_saved = False
         
-    
     def btns_enabled(self, flag):
         self.actionSave.setEnabled(flag)
+        self.actionSave_as.setEnabled(flag)
         self.actionPlus.setEnabled(flag)
         self.actionMinus.setEnabled(flag)
         self.btnNewDataset.setEnabled(flag)
@@ -126,6 +129,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         
         
     def rename_dataset(self, item, column):    
+        self.not_saved = True
         new_name = item.text(0)
         
         if np.any(new_name==self.datasets['name']):
@@ -137,6 +141,7 @@ class App(QMainWindow, design.Ui_MainWindow):
             return
             #raise ValueError(f'Dataset with name "{new_name}" is already exist!')
             
+            
         self.datasets['name'][self.selected_data] = new_name
         
     def error_msg(self, text):
@@ -146,24 +151,55 @@ class App(QMainWindow, design.Ui_MainWindow):
         msg.setInformativeText(text)
         msg.setWindowTitle("Error")
         msg.exec_()
+        
+    def closeEvent(self, event):
+        if self.not_saved:
+            qm = QMessageBox()
+            res = qm.question(self,'', f'Are you sure to exit with unsaved project "{self.pname}"?', qm.Save | qm.Discard | qm.Cancel)
+            qm.setDefaultButton(QMessageBox.Save)
+
+            if res == QMessageBox.Save:
+                self.save()
+                event.accept()
+            elif res == QMessageBox.Discard:
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
     
     @pyqtSlot()      
     def new_project(self):
+        self.not_saved = True
         dlg = DialogNewP(self)
         dlg.exec()
         if dlg.result():
             self.pname = dlg.pname.text()
             self.ppath = dlg.ppath.text()
             try:
-                os.mkdir(f'{self.ppath}/{self.pname}')
+                os.mkdir(f'{self.ppath}')
             except FileExistsError:
-                self.error_msg(f'Project "{self.ppath}/{self.pname}" is already exists!')
-                return 
+                if os.path.isfile(f'{self.ppath}/{self.pname}.tfl'):
+                    qm = QMessageBox()
+                    res = qm.question(self,'', f'Are you sure to rewrite project "{self.pname}"?', qm.Yes | qm.No)
+                    if res == qm.Yes:
+                        pass
+                    else:    
+                        return 
             self.btns_enabled(True)
+            self.clear()
+            self.project_label.setText(f'Project: "{self.pname}"')
+            
+    def clear(self):
+        self.not_saved = True
+        self.datasets = pd.DataFrame(columns=['name', 'data', 'data_disp', 'u_saved'])
+        self.tafel_widget.clear()
+        self.selected_data = ''
+        self.upd_tree()
         
-    
     @pyqtSlot()      
     def load_dataset(self):
+        self.not_saved = True
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
             new_fname = self.model.load_data(fname, )
@@ -183,6 +219,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         
     @pyqtSlot()      
     def add_to_dataset(self):
+        self.not_saved = True
         if np.any(self.selected_data):
             fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
             if fname:
@@ -198,11 +235,33 @@ class App(QMainWindow, design.Ui_MainWindow):
             print("You don't select dataset!")
             
     def save(self):
-        name = f'{self.ppath}/{self.pname}/project.tfl'
+        name = f'{self.ppath}/{self.pname}.tfl'
         with open(name, 'wb') as handle:
             pickle.dump((self.datasets), handle, protocol=pickle.HIGHEST_PROTOCOL)
+        self.not_saved = False
+        
+    def save_as(self):
+         dlg = DialogNewP(self)
+         dlg.ppath.setText(self.ppath)
+         dlg.ppath.setEnabled(False)
+         dlg.exec()
+         if dlg.result():
+             self.pname = dlg.pname.text()
+             if os.path.isfile(f'{self.ppath}/{self.pname}.tfl'):
+                 qm = QMessageBox()
+                 res = qm.question(self,'', f'Are you sure to rewrite project "{self.pname}"?', qm.Yes | qm.No)
+                 if res == qm.Yes:
+                     pass
+                 else:    
+                     return 
+             self.project_label.setText(f'Project: "{self.pname}"')
+             name = f'{self.ppath}/{self.pname}.tfl'
+             with open(name, 'wb') as handle:
+                 pickle.dump((self.datasets), handle, protocol=pickle.HIGHEST_PROTOCOL)
+             self.not_saved = False
        
     def open_file(self):
+        self.not_saved = True
         fname = QFileDialog.getOpenFileName(self, 'Open file', 'C:\\', 'Tafel app files (*.tfl)')[0]
         if fname:
             with open(fname, 'rb') as handle:
@@ -216,6 +275,7 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.upd_tree()
             self.do_select()
             self.btns_enabled(True)
+            self.project_label.setText(f'Project: "{self.pname}"')
             
     def export(self):
         name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Text files (*.txt)')[0]
@@ -285,6 +345,7 @@ class App(QMainWindow, design.Ui_MainWindow):
     
             
     def minus(self):
+        self.not_saved = True
         getSelected = self.input_tree.selectedItems()
         if getSelected:
             auto_select = False
@@ -323,6 +384,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         return q
     
     def on_change_selection(self):
+        self.not_saved = True
         pos = self.selection.data['pos']
         pos = np.sort(np.transpose(pos)[0, :])
         if pos[0] < self.model.xmin or pos[-1] > self.model.xmax:

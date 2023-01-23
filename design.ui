@@ -17,13 +17,20 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Tafel app</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_2">
     <item>
      <widget class="QWidget" name="widget" native="true">
       <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QLabel" name="project_label">
+         <property name="text">
+          <string>Project: </string>
+         </property>
+        </widget>
+       </item>
        <item>
         <widget class="QTreeWidget" name="input_tree">
          <column>
@@ -224,6 +231,7 @@
     <addaction name="actionNew"/>
     <addaction name="actionLoad"/>
     <addaction name="actionSave"/>
+    <addaction name="actionSave_as"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -251,6 +259,11 @@
   <action name="actionNew">
    <property name="text">
     <string>New project</string>
+   </property>
+  </action>
+  <action name="actionSave_as">
+   <property name="text">
+    <string>Save as</string>
    </property>
   </action>
  </widget>

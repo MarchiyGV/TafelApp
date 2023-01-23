@@ -36,7 +36,7 @@ class Model:
             
             temp = fname.split('.')
             temp = temp[-2].split('/')
-            new_fname = (self.parent.ppath + '/' + self.parent.pname + 
+            new_fname = (self.parent.ppath + 
                          '/' + str(temp[-1])+'.tdata')
             f = open(new_fname, 'w+')
             f.write(s)
