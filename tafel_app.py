@@ -35,27 +35,29 @@ class Model:
                         metadata2w += line
                     else:
                         s += line.replace(",", ".") 
-        except FileNotFoundError as err:
-            return err
+        except FileNotFoundError:
+            self.parent.error_msg(f'File "{fname}" was not found!')
+            return 
         return s, metadata, metadata2w
     
     def read_data(self, fname, flag):
-        s, metadata, metadata2w = self._read(fname)
+        temp = fname.split('.')
+        temp = temp[-2].split('/')
+        new_fname = (str(temp[-1])+'.tdata')
+        new_fpath = self.parent.ppath + '/' + new_fname
         if flag:
-            temp = fname.split('.')
-            temp = temp[-2].split('/')
-            new_fname = (self.parent.ppath + 
-                         '/' + str(temp[-1])+'.tdata')
-            f = open(new_fname, 'w+')
+            s, metadata, metadata2w = self._read(fname)
+            f = open(new_fpath, 'w+')
             f.write(s)
             f.close()
-            f = open(new_fname, 'a')
+            f = open(new_fpath, 'a')
             f.write(metadata2w)
             f.close()
-            data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
+            data = np.loadtxt(new_fpath, skiprows=1, delimiter='\t')
             return data, new_fname, metadata
         else:
-            data = np.loadtxt(fname, skiprows=1, delimiter='\t')
+            s, metadata, metadata2w = self._read(new_fpath)
+            data = np.loadtxt(new_fpath, skiprows=1, delimiter='\t')
             return data, fname, metadata
     
     def load_data(self, fname):

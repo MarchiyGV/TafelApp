@@ -17,6 +17,8 @@ import pickle
 import pandas as pd
 from PyQt5 import QtGui
 from PyQt5 import QtWidgets, uic, QtCore
+from PyQt5.QtCore import QEvent
+from PyQt5.QtWidgets import QMenu
 #from pyqtgraph import PlotWidget
 import os
 import design
@@ -116,11 +118,30 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.selected_data = ''
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
         self.input_tree.itemChanged[QTreeWidgetItem, int].connect(self.rename_dataset)
+        self.input_tree.installEventFilter(self)
         self.auto_selection()
         self.pname = ''
         self.ppath = ''
         self.btns_enabled(False)
         self.not_saved = False
+        
+    def eventFilter(self, source, event):
+        if event.type() == QEvent.ContextMenu: 
+            menu = QMenu()
+            menu.addAction('Clear all')
+            if menu.exec_(event.globalPos()):
+                qm = QMessageBox()
+                res = qm.question(self,'', f'Are you sure to close unsaved project "{self.pname}"?', qm.Save | qm.Discard | qm.Cancel)
+                qm.setDefaultButton(QMessageBox.Save)
+                if res == QMessageBox.Save:
+                    self.save()
+                elif res == QMessageBox.Discard:
+                    pass
+                else:
+                    return True
+                self.clear()
+            return True
+        return super().eventFilter(source, event)
         
     def btns_enabled(self, flag):
         self.actionSave.setEnabled(flag)
@@ -132,7 +153,6 @@ class App(QMainWindow, design.Ui_MainWindow):
         
         
     def rename_dataset(self, item, column):    
-        self.not_saved = True
         new_name = item.text(0)
         
         if np.any(new_name==self.datasets['name']):
@@ -146,6 +166,7 @@ class App(QMainWindow, design.Ui_MainWindow):
             
             
         self.datasets['name'][self.selected_data] = new_name
+        self.not_saved = True
         
     def error_msg(self, text):
         msg = QMessageBox()
@@ -170,10 +191,20 @@ class App(QMainWindow, design.Ui_MainWindow):
                 event.ignore()
         else:
             event.accept()
+        
     
     @pyqtSlot()      
     def new_project(self):
-        self.not_saved = True
+        if self.not_saved:
+            qm = QMessageBox()
+            res = qm.question(self,'', f'Are you sure to close unsaved project "{self.pname}"?', qm.Save | qm.Discard | qm.Cancel)
+            qm.setDefaultButton(QMessageBox.Save)
+            if res == QMessageBox.Save:
+                self.save()
+            elif res == QMessageBox.Discard:
+                pass
+            else:
+                return
         dlg = DialogNewP(self)
         dlg.exec()
         if dlg.result():
@@ -192,6 +223,7 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.btns_enabled(True)
             self.clear()
             self.project_label.setText(f'Project: "{self.pname}"')
+            self.not_saved = True
             
     def clear(self):
         self.not_saved = True
@@ -201,8 +233,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.upd_tree()
         
     @pyqtSlot()      
-    def load_dataset(self): # нужно реорганизовать код так, чтобы хранились только имена файлов в папке проекта, чтобы можно было кидать на другой комп
-        self.not_saved = True
+    def load_dataset(self): 
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
             new_fname, metadata = self.model.load_data(fname)
@@ -217,23 +248,25 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.datasets = pd.concat([self.datasets, row], ignore_index = True)
             self.upd_tree()
             self.selected_data = (self.datasets['name']==name)
+            self.not_saved = True
         if len(fnames)>0:
             self.tafel()
         
         
     @pyqtSlot()      
     def add_to_dataset(self):
-        self.not_saved = True
         if np.any(self.selected_data):
             fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
             if fname:
                 new_fname, metadata = self.model.add_data(fname)
                 self.metadata_panel.setText(metadata)
-                self.datasets['data'][self.selected_data][0].append(new_fname)
+                print((self.datasets['data'][self.selected_data]).values[0])
+                (self.datasets['data'][self.selected_data]).values[0].append(new_fname)
                 fname_disp = new_fname.split('/')[-1]
-                self.datasets['data_disp'][self.selected_data][0].append(fname_disp)
+                self.datasets['data_disp'][self.selected_data].values[0].append(fname_disp)
                 self.upd_tree()
                 self.tafel()
+                self.not_saved = True
             else:
                 pass
         else:
@@ -266,7 +299,16 @@ class App(QMainWindow, design.Ui_MainWindow):
              self.not_saved = False
        
     def open_file(self):
-        self.not_saved = True
+        if self.not_saved:
+            qm = QMessageBox()
+            res = qm.question(self,'', f'Are you sure to close unsaved project "{self.pname}"?', qm.Save | qm.Discard | qm.Cancel)
+            qm.setDefaultButton(QMessageBox.Save)
+            if res == QMessageBox.Save:
+                self.save()
+            elif res == QMessageBox.Discard:
+                pass
+            else:
+                return
         fname = QFileDialog.getOpenFileName(self, 'Open file', 'C:\\', 'Tafel app files (*.tfl)')[0]
         if fname:
             with open(fname, 'rb') as handle:
@@ -332,19 +374,14 @@ class App(QMainWindow, design.Ui_MainWindow):
             select = self.datasets['data'][self.selected_data].values[0]
             for i, fname in enumerate(select):
                 if i==0:
-                    flag = self.model.load_data(fname)
-                    if isinstance(flag, FileNotFoundError):
-                        self.error_msg(f'File {fname} was not found!')
-                        return
+                    new_fname, metadata = self.model.load_data(fname)
                 else:
-                    flag = self.model.add_data(fname)
-                    if isinstance(flag, FileNotFoundError):
-                        self.error_msg(f'File {fname} was not found!')
-                        return
+                    new_fname, metadata = self.model.add_data(fname)
             if auto_select:
                 self.auto_selection()
             else:
                 self.u = np.array(self.datasets['u_saved'][self.selected_data].values[0])
+            self.metadata_panel.setText(metadata)
             self.tafel()
         
     def auto_selection(self):
@@ -356,7 +393,6 @@ class App(QMainWindow, design.Ui_MainWindow):
     
             
     def minus(self):
-        self.not_saved = True
         getSelected = self.input_tree.selectedItems()
         if getSelected:
             auto_select = False
@@ -377,7 +413,8 @@ class App(QMainWindow, design.Ui_MainWindow):
                     self.datasets = self.datasets.drop(ind)
                     
                 auto_select = True
-                
+            
+            self.not_saved = True
             self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
             self.upd_tree()
             self.do_select(auto_select)
@@ -395,7 +432,6 @@ class App(QMainWindow, design.Ui_MainWindow):
         return q
     
     def on_change_selection(self):
-        self.not_saved = True
         pos = self.selection.data['pos']
         pos = np.sort(np.transpose(pos)[0, :])
         if pos[0] < self.model.xmin or pos[-1] > self.model.xmax:
@@ -414,6 +450,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.u = np.array(pos)
         self.datasets.loc[self.selected_data, 'u_saved'] = [self.u]
         self.tafel(upd_range=False)
+        self.not_saved = True
         return True
 
     def output(self):
