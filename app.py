@@ -48,7 +48,10 @@ class DialogNewP(QDialog):
         super().__init__(parent)
         uic.loadUi('dialog_new_project.ui', self)
         self.open_path_btn.clicked.connect(self.open_folder)
-        self.ppath.setText(os.getcwd())
+        if parent.ppath:
+            self.ppath.setText(parent.ppath)
+        else:
+            self.ppath.setText(os.getcwd())
         
     def open_folder(self):
         folder = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
@@ -91,7 +94,7 @@ class TableModel(QtCore.QAbstractTableModel):
         return self._data
 
 class App(QMainWindow, design.Ui_MainWindow):
-
+    columns = ['name', 'data', 'data_disp', 'u_saved']
     def __init__(self):
         super().__init__()
         uic.loadUi('design.ui', self)
@@ -109,7 +112,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.info = TableModel([['', ''], ['', ''], ['', ''], ['', ''], ['', '']])
         self.output_widget.setModel(self.info)
         self.tafel_widget.setBackground('w')
-        self.datasets = pd.DataFrame(columns=['name', 'data', 'data_disp', 'u_saved'])
+        self.datasets = pd.DataFrame(columns=App.columns)
         self.selected_data = ''
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
         self.input_tree.itemChanged[QTreeWidgetItem, int].connect(self.rename_dataset)
@@ -192,17 +195,18 @@ class App(QMainWindow, design.Ui_MainWindow):
             
     def clear(self):
         self.not_saved = True
-        self.datasets = pd.DataFrame(columns=['name', 'data', 'data_disp', 'u_saved'])
+        self.datasets = pd.DataFrame(columns=App.columns)
         self.tafel_widget.clear()
         self.selected_data = ''
         self.upd_tree()
         
     @pyqtSlot()      
-    def load_dataset(self):
+    def load_dataset(self): # нужно реорганизовать код так, чтобы хранились только имена файлов в папке проекта, чтобы можно было кидать на другой комп
         self.not_saved = True
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
-            new_fname = self.model.load_data(fname, )
+            new_fname, metadata = self.model.load_data(fname)
+            self.metadata_panel.setText(metadata)
             name = f'Data {len(self.datasets)+1}'
             self.auto_selection()
             data_disp = new_fname.split('/')[-1]
@@ -223,7 +227,8 @@ class App(QMainWindow, design.Ui_MainWindow):
         if np.any(self.selected_data):
             fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
             if fname:
-                new_fname = self.model.add_data(fname)
+                new_fname, metadata = self.model.add_data(fname)
+                self.metadata_panel.setText(metadata)
                 self.datasets['data'][self.selected_data][0].append(new_fname)
                 fname_disp = new_fname.split('/')[-1]
                 self.datasets['data_disp'][self.selected_data][0].append(fname_disp)
@@ -267,11 +272,17 @@ class App(QMainWindow, design.Ui_MainWindow):
             with open(fname, 'rb') as handle:
                 self.datasets = pickle.load(handle)
             ppath = ''
-            for s in fname.split('/')[:-2]:
-                ppath += s
+            for s in fname.split('/')[:-1]:
+                ppath += (s+'/')
             self.ppath = ppath
-            self.pname = fname.split('/')[-2]
-            self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
+            pname = ''
+            for s in (fname.split('/')[-1]).split('.')[:-1]:
+                pname += s
+            self.pname = pname
+            if len(self.datasets)>0:
+                self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
+            else:
+                self.selected_data = ''
             self.upd_tree()
             self.do_select()
             self.btns_enabled(True)
