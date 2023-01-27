@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 import pickle
 import pandas as pd
 from PyQt5 import QtGui
+from PyQt5.QtGui import QKeySequence
 from PyQt5 import QtWidgets, uic, QtCore
 from PyQt5.QtCore import QEvent
 from PyQt5.QtWidgets import QMenu
@@ -100,6 +101,14 @@ class App(QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         super().__init__()
         uic.loadUi('design.ui', self)
+        self.saveSc = QShortcut(QKeySequence('Ctrl+S'), self)
+        self.saveSc.activated.connect(self.save)
+        self.saveAsSc = QShortcut(QKeySequence('Ctrl+Shift+S'), self)
+        self.saveAsSc.activated.connect(self.save_as)
+        self.openSc = QShortcut(QKeySequence('Ctrl+O'), self)
+        self.openSc.activated.connect(self.open_file)
+        self.newSc = QShortcut(QKeySequence('Ctrl+N'), self)
+        self.newSc.activated.connect(self.new_project)
         self.actionNew.triggered.connect(self.new_project)
         self.actionLoad.triggered.connect(self.open_file)
         self.actionSave.triggered.connect(self.save)
@@ -115,6 +124,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.output_widget.setModel(self.info)
         self.tafel_widget.setBackground('w')
         self.datasets = pd.DataFrame(columns=App.columns)
+        self.new_metadata = {}
         self.selected_data = ''
         self.input_tree.itemSelectionChanged.connect(self.data_selection)
         self.input_tree.itemChanged[QTreeWidgetItem, int].connect(self.rename_dataset)
@@ -124,7 +134,17 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.ppath = ''
         self.btns_enabled(False)
         self.not_saved = False
+        self.metadata_panel.textChanged.connect(self.change_metadata)
         
+    @pyqtSlot()     
+    def change_metadata(self):
+        self.not_saved = True
+        _id = self.selected_id()
+        self.new_metadata[_id] = self.metadata_panel.toPlainText()
+        
+    def selected_id(self):
+        return self.datasets[self.selected_data].index.tolist()[0]
+    
     def eventFilter(self, source, event):
         if event.type() == QEvent.ContextMenu: 
             menu = QMenu()
@@ -144,6 +164,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         return super().eventFilter(source, event)
         
     def btns_enabled(self, flag):
+        self.metadata_panel.setEnabled(flag)
         self.actionSave.setEnabled(flag)
         self.actionSave_as.setEnabled(flag)
         self.actionPlus.setEnabled(flag)
@@ -175,7 +196,7 @@ class App(QMainWindow, design.Ui_MainWindow):
         msg.setInformativeText(text)
         msg.setWindowTitle("Error")
         msg.exec_()
-        
+            
     def closeEvent(self, event):
         if self.not_saved:
             qm = QMessageBox()
@@ -209,6 +230,9 @@ class App(QMainWindow, design.Ui_MainWindow):
         dlg.exec()
         if dlg.result():
             self.pname = dlg.pname.text()
+            if not self.pname:
+                self.error_msg('You did not write a name!')
+                return
             self.ppath = dlg.ppath.text()
             try:
                 os.mkdir(f'{self.ppath}')
@@ -237,7 +261,9 @@ class App(QMainWindow, design.Ui_MainWindow):
         fnames = QFileDialog.getOpenFileNames(self, 'Open file', os.getcwd())[0]
         for fname in fnames:
             new_fname, metadata = self.model.load_data(fname)
+            self.metadata_panel.blockSignals(True)
             self.metadata_panel.setText(metadata)
+            self.metadata_panel.blockSignals(False)
             name = f'Data {len(self.datasets)+1}'
             self.auto_selection()
             data_disp = new_fname.split('/')[-1]
@@ -248,6 +274,8 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.datasets = pd.concat([self.datasets, row], ignore_index = True)
             self.upd_tree()
             self.selected_data = (self.datasets['name']==name)
+            _id = self.selected_id()
+            self.new_metadata[_id] = False
             self.not_saved = True
         if len(fnames)>0:
             self.tafel()
@@ -259,8 +287,11 @@ class App(QMainWindow, design.Ui_MainWindow):
             fname = QFileDialog.getOpenFileName(self, 'Open file', os.getcwd())[0]
             if fname:
                 new_fname, metadata = self.model.add_data(fname)
+                '''
+                self.metadata_panel.blockSignals(True)
                 self.metadata_panel.setText(metadata)
-                print((self.datasets['data'][self.selected_data]).values[0])
+                self.metadata_panel.blockSignals(False)
+                '''
                 (self.datasets['data'][self.selected_data]).values[0].append(new_fname)
                 fname_disp = new_fname.split('/')[-1]
                 self.datasets['data_disp'][self.selected_data].values[0].append(fname_disp)
@@ -272,19 +303,32 @@ class App(QMainWindow, design.Ui_MainWindow):
         else:
             print("You don't select dataset!")
             
-    def save(self):
-        name = f'{self.ppath}/{self.pname}.tfl'
+    def save(self, name=False):
+        if not name:
+            name = f'{self.ppath}/{self.pname}.tfl'
         with open(name, 'wb') as handle:
             pickle.dump((self.datasets), handle, protocol=pickle.HIGHEST_PROTOCOL)
+        for key, value in self.new_metadata.items():
+            fname = self.ppath + '/' + self.datasets['data'].loc[key][0]
+            if value:
+                data, _, _ = self.model._read(fname)
+                with open(fname, 'w') as f:
+                    f.write(data)
+                    for line in value.split('\n'):
+                        f.write(f'#{line}\n')
         self.not_saved = False
         
     def save_as(self):
          dlg = DialogNewP(self)
+         dlg.setWindowTitle('Save as...')
          dlg.ppath.setText(self.ppath)
          dlg.ppath.setEnabled(False)
          dlg.exec()
          if dlg.result():
              self.pname = dlg.pname.text()
+             if not self.pname:
+                 self.error_msg('You did not write a name!')
+                 return
              if os.path.isfile(f'{self.ppath}/{self.pname}.tfl'):
                  qm = QMessageBox()
                  res = qm.question(self,'', f'Are you sure to rewrite project "{self.pname}"?', qm.Yes | qm.No)
@@ -294,9 +338,7 @@ class App(QMainWindow, design.Ui_MainWindow):
                      return 
              self.project_label.setText(f'Project: "{self.pname}"')
              name = f'{self.ppath}/{self.pname}.tfl'
-             with open(name, 'wb') as handle:
-                 pickle.dump((self.datasets), handle, protocol=pickle.HIGHEST_PROTOCOL)
-             self.not_saved = False
+             self.save(name)
        
     def open_file(self):
         if self.not_saved:
@@ -323,6 +365,8 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.pname = pname
             if len(self.datasets)>0:
                 self.selected_data = (self.datasets['name']==self.datasets['name'].iloc[0]) #select first element
+                for e in self.datasets.index.tolist():
+                    self.new_metadata[e] = False
             else:
                 self.selected_data = ''
             self.upd_tree()
@@ -376,12 +420,18 @@ class App(QMainWindow, design.Ui_MainWindow):
                 if i==0:
                     new_fname, metadata = self.model.load_data(fname)
                 else:
-                    new_fname, metadata = self.model.add_data(fname)
+                    #new_fname, metadata = self.model.add_data(fname)
+                    new_fname, _ = self.model.add_data(fname)
             if auto_select:
                 self.auto_selection()
             else:
                 self.u = np.array(self.datasets['u_saved'][self.selected_data].values[0])
+            self.metadata_panel.blockSignals(True)
+            _id = self.selected_id()
+            if self.new_metadata[_id]:
+                metadata = self.new_metadata[_id]
             self.metadata_panel.setText(metadata)
+            self.metadata_panel.blockSignals(False)
             self.tafel()
         
     def auto_selection(self):
