@@ -6,8 +6,9 @@ import os
 
 class Model:
     k = 8.617333262e-5
-    def __init__(self):
+    def __init__(self, parent):
         super().__init__()
+        self.parent = parent
         self.E_corr = 0
         self.i_corr = 0
         self.alpha = 0
@@ -22,23 +23,48 @@ class Model:
         self.y = self.j(alpha, 300, self.x-ocv)
         self.ylog = np.log(np.abs(self.y))
         
-    def load_data(self, fname):
+    def _read(self, fname):
         try:
-            data = np.loadtxt(fname, skiprows=1, delimiter=',')
-        except ValueError:
-            f = open(fname)
-            s = f.read().replace(",", "." ) 
-            f.close()
-            temp = fname.split('.')
-            new_fname =  ''
-            for e in temp[:-2]:
-                new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'.temp')
-            f = open(new_fname, 'w+')
+            s = ''
+            metadata2w = '\n'
+            metadata = ''
+            with open(fname) as f:
+                for line in f:
+                    if '#' in line:
+                        metadata += line.replace('#', '')
+                        metadata2w += line
+                    else:
+                        s += line.replace(",", ".") 
+        except FileNotFoundError:
+            self.parent.error_msg(f'File "{fname}" was not found!')
+            return 
+        return s, metadata, metadata2w
+    
+    def read_data(self, fname, flag):
+        temp = fname.split('.')
+        temp = temp[-2].split('/')
+        new_fname = (str(temp[-1])+'.tdata')
+        new_fpath = self.parent.ppath + '/' + new_fname
+        if flag:
+            s, metadata, metadata2w = self._read(fname)
+            f = open(new_fpath, 'w+')
             f.write(s)
             f.close()
-            data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
-            os.remove(new_fname)
+            f = open(new_fpath, 'a')
+            f.write(metadata2w)
+            f.close()
+            data = np.loadtxt(new_fpath, skiprows=1, delimiter='\t')
+            return data, new_fname, metadata
+        else:
+            s, metadata, metadata2w = self._read(new_fpath)
+            data = np.loadtxt(new_fpath, skiprows=1, delimiter='\t')
+            return data, fname, metadata
+    
+    def load_data(self, fname):
+        flag = True 
+        if fname.split('.')[-1] == 'tdata':
+            flag = False
+        data, new_fname, metadata = self.read_data(fname, flag)
             
         self.x = np.transpose(data[:, 1]).reshape((-1, 1))
         ind = np.argsort(self.x, axis=0)
@@ -49,23 +75,14 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
+        return new_fname, metadata
         
     def add_data(self, fname):
-        try:
-            data = np.loadtxt(fname, skiprows=1, delimiter=',')
-        except ValueError:
-            f = open(fname)
-            s = f.read().replace(",", "." ) 
-            f.close()
-            temp = fname.split('.')
-            new_fname =  ''
-            for e in temp[:-2]:
-                new_fname += (str(e)+'.')
-            new_fname += (str(temp[-2])+'.temp')
-            f = open(new_fname, "w+")
-            f.write(s)
-            f.close()
-            data = np.loadtxt(new_fname, skiprows=1, delimiter='\t')
+        flag = True 
+        if fname.split('.')[-1] == 'tdata':
+            flag = False
+        data, new_fname, metadata = self.read_data(fname, flag)
+        
         x_new = np.transpose(data[:, 1]).reshape((-1, 1))
         self.x = np.concatenate((self.x, x_new))
         ind = np.argsort(self.x, axis=0)
@@ -77,6 +94,7 @@ class Model:
         self.xmin = self.x.min()
         self.xmax = self.x.max()
         self.dx = self.xmax-self.xmin
+        return new_fname, metadata
         
     def j(self, alpha, T, eta):
         f = 1/(Model.k*T)

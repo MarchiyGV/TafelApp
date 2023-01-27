@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>Tafel app</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -25,7 +25,17 @@
      <widget class="QWidget" name="widget" native="true">
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
+        <widget class="QLabel" name="project_label">
+         <property name="text">
+          <string>Project: </string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QTreeWidget" name="input_tree">
+         <property name="contextMenuPolicy">
+          <enum>Qt::CustomContextMenu</enum>
+         </property>
          <column>
           <property name="text">
            <string>Datasets</string>
@@ -186,7 +196,7 @@
         <height>1</height>
        </size>
       </property>
-      <layout class="QHBoxLayout" name="horizontalLayout">
+      <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="PlotWidget" name="tafel_widget" native="true">
          <property name="sizePolicy">
@@ -199,6 +209,26 @@
           <size>
            <width>1500</width>
            <height>0</height>
+          </size>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::DefaultContextMenu</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label">
+         <property name="text">
+          <string>Comments:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QTextEdit" name="metadata_panel">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>300</height>
           </size>
          </property>
         </widget>
@@ -221,8 +251,10 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionNew"/>
     <addaction name="actionLoad"/>
     <addaction name="actionSave"/>
+    <addaction name="actionSave_as"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -244,7 +276,17 @@
   </action>
   <action name="actionLoad">
    <property name="text">
-    <string>Open</string>
+    <string>Open project</string>
+   </property>
+  </action>
+  <action name="actionNew">
+   <property name="text">
+    <string>New project</string>
+   </property>
+  </action>
+  <action name="actionSave_as">
+   <property name="text">
+    <string>Save as</string>
    </property>
   </action>
  </widget>
