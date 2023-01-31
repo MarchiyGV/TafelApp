@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QTreeWidgetItem
 )
 import pickle
+import re
 import pandas as pd
 from PyQt5 import QtGui
 from PyQt5.QtGui import QKeySequence
@@ -62,6 +63,11 @@ class DialogNewP(QDialog):
 
 
 class TableModel(QtCore.QAbstractTableModel):
+    keys = {'E_corr': 'E_corr',
+            'i_corr': 'i_corr',
+            'alpha': 'alpha',
+            'beta_1': 'beta_1',
+            'beta_2': 'beta_2'}
 
     def __init__(self, data):
         super(TableModel, self).__init__()
@@ -375,8 +381,30 @@ class App(QMainWindow, design.Ui_MainWindow):
             self.project_label.setText(f'Project: "{self.pname}"')
             
     def export(self):
-        name = QFileDialog.getSaveFileName(self, 'Save File', 'C:\\', 'Text files (*.txt)')[0]
-        np.savetxt(name, self.info.export(), fmt="%s")
+        name = QFileDialog.getSaveFileName(self, 'Save File', self.ppath+'\\'+self.pname, 'Text files (*.txt)')[0]
+        vals = []
+        for i in self.datasets.index:
+            self.selected_data = (self.datasets['name']==self.datasets.at[i, 'name']) 
+            self.do_select()
+            df = {'name': self.datasets.at[i, 'name']}
+            for key, val in self.info.export():
+                flag = False
+                for prop_key, prop_name in TableModel.keys.items():
+                    if key == prop_name:
+                        val_num = float(re.findall('-?\d+[\,\.]?\d+', val)[0])
+                        if 'n' in val:
+                            val_num *= 1e-9
+                        elif 'u' in val:
+                            val_num *= 1e-6
+                        elif 'm' in val:
+                            val_num *= 1e-3
+                        df[prop_key] = val_num
+                        flag = True
+                if not flag:
+                    df[key] = val
+            vals.append(df)
+        df = pd.DataFrame(vals)
+        df.to_csv(name, index=False)
     
     def upd_tree(self):
         self.input_tree.clear()
