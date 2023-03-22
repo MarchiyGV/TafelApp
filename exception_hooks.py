@@ -2,6 +2,7 @@ import sys
 import traceback
 import logging
 from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtCore import QObject, pyqtSignal
 
 # basic logger functionality
 log = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ def show_exception_box(log_msg):
         log.debug("No QApplication instance available.")
  
 class UncaughtHook(QtCore.QObject):
-    _exception_caught = QtCore.Signal(object)
+    _exception_caught = pyqtSignal()# QtCore.Signal(object)
  
     def __init__(self, *args, **kwargs):
         super(UncaughtHook, self).__init__(*args, **kwargs)

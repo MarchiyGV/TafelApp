@@ -129,6 +129,14 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.info = TableModel([['', ''], ['', ''], ['', ''], ['', ''], ['', '']])
         self.output_widget.setModel(self.info)
         self.tafel_widget.setBackground('w')
+        axX = self.tafel_widget.getAxis('bottom')
+        axX.setLabel('E', 'mV')
+        axX.setTextPen('black', width=3)
+        axY = self.tafel_widget.getAxis('left')
+        axY.setLabel('log(I)', 'log(mA)')
+        axY.setTextPen('black', width=3)
+        axX.setPen('black', width=3)
+        axY.setPen('black', width=3)
         self.datasets = pd.DataFrame(columns=App.columns)
         self.new_metadata = {}
         self.selected_data = ''
@@ -472,6 +480,7 @@ class App(QMainWindow, design.Ui_MainWindow):
             
     def minus(self):
         getSelected = self.input_tree.selectedItems()
+        self.tafel_widget.clear()
         if getSelected:
             auto_select = False
             baseNode = getSelected[0]
@@ -562,11 +571,12 @@ class App(QMainWindow, design.Ui_MainWindow):
         self.info.df = [
             ['E_corr', str(pretty_round(e))+unit_e+'V'],
             ['i_corr', str(pretty_round(i))+unit_i+'A'],
-            ['alpha', str(pretty_round(self.model.alpha))],
+            ['alpha', str(round(self.model.alpha, 2))],
             ['beta_1', str(pretty_round(self.model.a1))+'A/V'],
             ['beta_2', str(pretty_round(self.model.a2))+'A/V']
             ]
         
+    
     def tafel(self, upd_range=True):
         i_s = self.convert_u_to_slider(self.u)
         i_s = list(map(int, i_s))
@@ -596,6 +606,22 @@ class App(QMainWindow, design.Ui_MainWindow):
         
         self.output()
         
+    '''   
+    def tafel(self, upd_range=True):
+        i_s = self.convert_u_to_slider(self.u)
+        i_s = list(map(int, i_s))
+        x = self.model.x.reshape((-1,))
+        ylog = self.model.ylog.reshape((-1,))
+        ecorr, icorr, alpha, a1, b1, a2, b2 = self.model.tafel(*i_s)
+        
+        self.tafel_widget.plot(x, ylog, 
+                               pen=mkPen('black', width=3))
+        if upd_range:
+            self.tafel_widget.setYRange(ylog.min(), ylog.max(), padding=0.2)
+            self.tafel_widget.setXRange(x.min(), x.max(), padding=0.2)
+        
+        self.output()
+    '''
         
 if __name__ == '__main__': 
     import sys

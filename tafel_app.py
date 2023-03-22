@@ -1,5 +1,4 @@
 import numpy as np
-from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
 import os
 
@@ -71,6 +70,8 @@ class Model:
         self.x = self.x[ind][:,:,0]
         self.y = np.transpose(data[:, 2]).reshape((-1, 1))
         self.y = self.y[ind][:,:,0]
+        mask = (self.y==0)
+        self.y[mask] = np.mean(self.y)*1e-16
         self.ylog = np.log10(np.abs(self.y))
         self.xmin = self.x.min()
         self.xmax = self.x.max()
@@ -88,6 +89,8 @@ class Model:
         ind = np.argsort(self.x, axis=0)
         self.x = self.x[ind][:,:,0]
         y_new = np.transpose(data[:, 2]).reshape((-1, 1))
+        mask = (y_new==0)
+        y_new[mask] = np.mean(y_new)*1e-16
         self.y = np.concatenate((self.y, y_new))
         self.y = self.y[ind][:,:,0]
         self.ylog = np.log10(np.abs(self.y))
